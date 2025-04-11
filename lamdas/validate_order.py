@@ -38,7 +38,11 @@ def __validate_order(slots):
     lego_size = __extract_slot_value(slots, slot_name=Slot.LegoSize)
     if not lego_size:
         logger.debug(f"Missing {Slot.LegoSize} slot.")
-        return __build_validation_result(is_valid=False, invalid_slot=Slot.LegoSize)
+        return __build_validation_result(
+            is_valid=False,
+            invalid_slot=Slot.LegoSize,
+            message=f"Which {Slot.LegoSize} do you want ({', '.join(LEGO_SIZES)})?",
+        )
     if lego_size not in LEGO_SIZES:
         logger.debug(f"Invalid {Slot.LegoSize}: {lego_size}")
         return __build_validation_result(
@@ -50,7 +54,11 @@ def __validate_order(slots):
     lego_model = __extract_slot_value(slots, slot_name=Slot.LegoModel)
     if not lego_model:
         logger.debug(f"Missing {Slot.LegoModel} slot.")
-        return __build_validation_result(is_valid=False, invalid_slot=Slot.LegoModel)
+        return __build_validation_result(
+            is_valid=False,
+            invalid_slot=Slot.LegoModel,
+            message=f"Which {Slot.LegoModel} do you want ({', '.join(LEGO_MODELS)})?",
+        )
     if lego_model not in LEGO_MODELS:
         logger.debug(f"Invalid {Slot.LegoModel}: {lego_model}")
         return __build_validation_result(
