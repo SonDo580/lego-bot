@@ -7,7 +7,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 dynamodb_client = boto3.client("dynamodb")
-TABLE_NAME = os.environ["TABLE_NAME"]  # LegoOrders
+TABLE_NAME = os.environ["TABLE_NAME"]
 
 LEGO_SIZES = ["small", "medium", "large"]
 LEGO_MODELS = ["ship", "tank", "rocket"]

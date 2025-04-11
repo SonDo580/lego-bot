@@ -9,8 +9,8 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 s3 = boto3.client("s3")
-BUCKET_NAME = os.environ["BUCKET_NAME"]  # "lex-s3-integration-sondm"
-PREFIX = os.environ["PREFIX"]  # "lego-bot/"
+BUCKET_NAME = os.environ["BUCKET_NAME"]
+PREFIX = os.environ["PREFIX"]
 
 
 def lambda_handler(event, context):
