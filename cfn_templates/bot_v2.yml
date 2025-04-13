@@ -1,0 +1,166 @@
+# V1 -> V2:
+# - enable conversation logs
+# - stream conversation logs from CloudWatch to S3
+
+Resources:
+  LegoBotTextLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "lego-bot-${AWS::StackName}"
+
+  BotRuntimeRole:
+    DependsOn: LegoBotTextLogGroup
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lexv2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: LexRuntimeRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "polly:SynthesizeSpeech"
+                  - "comprehend:DetectSentiment"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !GetAtt LegoBotTextLogGroup.Arn
+
+  LegoBot:
+    DependsOn: BotRuntimeRole
+    Type: AWS::Lex::Bot
+    Properties:
+      Name: !Sub "LegoBot-${AWS::StackName}"
+      RoleArn: !GetAtt BotRuntimeRole.Arn
+      DataPrivacy:
+        ChildDirected: false
+      IdleSessionTTLInSeconds: 300
+      AutoBuildBotLocales: false
+      BotLocales:
+        - LocaleId: "en_US"
+          NluConfidenceThreshold: 0.40
+          VoiceSettings:
+            VoiceId: "Ivy"
+          SlotTypes:
+            - Name: "LegoSizes"
+              SlotTypeValues:
+                - SampleValue:
+                    Value: small
+                - SampleValue:
+                    Value: medium
+                - SampleValue:
+                    Value: large
+              ValueSelectionSetting:
+                ResolutionStrategy: ORIGINAL_VALUE
+            - Name: "LegoModels"
+              SlotTypeValues:
+                - SampleValue:
+                    Value: ship
+                - SampleValue:
+                    Value: tank
+                - SampleValue:
+                    Value: rocket
+              ValueSelectionSetting:
+                ResolutionStrategy: ORIGINAL_VALUE
+          Intents:
+            - Name: "OrderLego"
+              SampleUtterances:
+                - Utterance: "Lego"
+                - Utterance: "I'd like to order a lego"
+                - Utterance: "I want a {LegoSize} lego"
+                - Utterance: "I want a {LegoModel} lego"
+                - Utterance: "I want a {LegoSize} {LegoModel} lego"
+              IntentConfirmationSetting:
+                PromptSpecification:
+                  MessageGroupsList:
+                    - Message:
+                        PlainTextMessage:
+                          Value: "Would you like me to order your {LegoSize} {LegoModel}?"
+                  MaxRetries: 3
+                  AllowInterrupt: false
+                DeclinationResponse:
+                  MessageGroupsList:
+                    - Message:
+                        PlainTextMessage:
+                          Value: "Good luck finding it yourself."
+                  AllowInterrupt: false
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: LegoModel
+                - Priority: 2
+                  SlotName: LegoSize
+              Slots:
+                - Name: "LegoSize"
+                  SlotTypeName: "LegoSizes"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Which lego size do you want?"
+                      MaxRetries: 3
+                      AllowInterrupt: false
+                - Name: "LegoModel"
+                  SlotTypeName: "LegoModels"
+                  ValueElicitationSetting:
+                    SlotConstraint: "Required"
+                    PromptSpecification:
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Which lego model do you want?"
+                      MaxRetries: 3
+                      AllowInterrupt: false
+            - Name: "FallbackIntent"
+              ParentIntentSignature: "AMAZON.FallbackIntent"
+              IntentClosingSetting:
+                ClosingResponse:
+                  MessageGroupsList:
+                    - Message:
+                        PlainTextMessage:
+                          Value: "Sorry, I can't help you with that."
+                  AllowInterrupt: false
+
+  LegoBotVersion:
+    DependsOn: LegoBot
+    Type: AWS::Lex::BotVersion
+    Properties:
+      BotId: !Ref LegoBot
+      BotVersionLocaleSpecification:
+        - LocaleId: en_US
+          BotVersionLocaleDetails:
+            SourceBotVersion: DRAFT
+
+  FirstBotAlias:
+    DependsOn:
+      - LegoBotVersion
+      - LegoBotTextLogGroup
+    Type: AWS::Lex::BotAlias
+    Properties:
+      BotAliasName: "LegoBotVersion1Alias"
+      BotId: !Ref LegoBot
+      BotVersion: !GetAtt LegoBotVersion.BotVersion
+      BotAliasLocaleSettings: 
+        - LocaleId: en_US
+          BotAliasLocaleSetting: 
+            Enabled: true
+      ConversationLogSettings:
+        TextLogSettings:
+          - Enabled: true
+            Destination:
+              CloudWatch:
+                CloudWatchLogGroupArn: !GetAtt LegoBotTextLogGroup.Arn
+                LogPrefix: ""
