@@ -138,3 +138,7 @@ Resources:
       BotAliasName: "LegoBotVersion1Alias"
       BotId: !Ref LegoBot
       BotVersion: !GetAtt LegoBotVersion.BotVersion
+      BotAliasLocaleSettings: 
+        - LocaleId: en_US
+          BotAliasLocaleSetting: 
+            Enabled: false
