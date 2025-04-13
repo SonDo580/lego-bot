@@ -8,6 +8,106 @@ Resources:
     Properties:
       LogGroupName: !Sub "lego-bot-${AWS::StackName}"
 
+  LogArchiveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "lego-bot-logs-${AWS::StackName}"
+
+  StreamLogFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: StreamLogFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub "${LogArchiveBucket.Arn}/*"
+
+  StreamLogFunction:
+    DependsOn:
+      - StreamLogFunctionRole
+      - LogArchiveBucket
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "LegoBotLogStreamer-${AWS::StackName}"
+      Handler: index.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt StreamLogFunctionRole.Arn
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref LogArchiveBucket
+          PREFIX: ""
+      Code:
+        ZipFile: |
+          import os
+          import boto3
+          import json
+          import gzip
+          import base64
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.DEBUG)
+
+          s3 = boto3.client("s3")
+          BUCKET_NAME = os.environ["BUCKET_NAME"]
+          PREFIX = os.environ["PREFIX"]
+
+          def lambda_handler(event, context):
+              compressed_payload = base64.b64decode(event["awslogs"]["data"])
+              decompressed_payload = gzip.decompress(compressed_payload)
+              log_data = json.loads(decompressed_payload)
+
+              for log_event in log_data["logEvents"]:
+                  key = f"{PREFIX}log_{log_event['id']}_{log_event['timestamp']}.json"
+
+                  s3.put_object(
+                      Bucket=BUCKET_NAME,
+                      Key=key,
+                      Body=json.dumps(log_event["message"]),
+                      ContentType="application/json",
+                  )
+
+                  logger.info(f"Stored log to s3://{BUCKET_NAME}/{key}")
+
+  StreamLogFunctionInvokePermission:
+    DependsOn:
+      - LegoBotTextLogGroup
+      - StreamLogFunction
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt StreamLogFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: logs.amazonaws.com
+      SourceArn: !GetAtt LegoBotTextLogGroup.Arn
+
+  LegoBotLogGroupSubscription:
+    DependsOn:
+      - LegoBotTextLogGroup
+      - StreamLogFunction
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      LogGroupName: !Ref LegoBotTextLogGroup
+      DestinationArn: !GetAtt StreamLogFunction.Arn
+      FilterPattern: ""
+
   BotRuntimeRole:
     DependsOn: LegoBotTextLogGroup
     Type: AWS::IAM::Role
@@ -153,9 +253,9 @@ Resources:
       BotAliasName: "LegoBotVersion1Alias"
       BotId: !Ref LegoBot
       BotVersion: !GetAtt LegoBotVersion.BotVersion
-      BotAliasLocaleSettings: 
+      BotAliasLocaleSettings:
         - LocaleId: en_US
-          BotAliasLocaleSetting: 
+          BotAliasLocaleSetting:
             Enabled: true
       ConversationLogSettings:
         TextLogSettings:
