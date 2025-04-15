@@ -21,6 +21,8 @@ A chatbot that helps users order Lego models through natural conversation
 
 ## Folder structure
 
+```python
 ├── lambdas/               # Python Lambda functions
 ├── cfn-templates/         # Manually defined CloudFormation templates
 └── lego-bot-with-cdk/     # CDK-based infrastructure (written in TypeScript)
+```
